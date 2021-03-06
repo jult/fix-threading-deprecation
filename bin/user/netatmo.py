@@ -32,6 +32,7 @@ import re
 import socket
 import syslog
 import threading
+import datetime
 import time
 from urllib.parse import urlencode
 import urllib.request, urllib.error, urllib.parse
@@ -270,6 +271,7 @@ class CloudClient(Collector):
     NETATMO_URL = 'https://api.netatmo.net'
     AUTH_URL = '/oauth2/token'
     DATA_URL = '/api/getstationsdata'
+    GETM_URL = '/api/getmeasure'
 
     # mapping between observation name and function used to convert it
     CONVERSIONS = {
@@ -305,6 +307,7 @@ class CloudClient(Collector):
         self._auth = CloudClient.ClientAuth(
             username, password, client_id, client_secret)
         self._sd = CloudClient.StationData(self._auth)
+        self._gm = CloudClient.StationMeasure(self._auth)
         self._thread = None
         self._collect_data = False
 
@@ -316,7 +319,7 @@ class CloudClient(Collector):
             if now - last_poll > self._poll_interval:
                 for tries in range(self._max_tries):
                     try:
-                        CloudClient.get_data(self._sd, self._device_id)
+                        CloudClient.get_data(self._sd, self._gm, self._device_id)
                         break
                     except (socket.error, socket.timeout, urllib.error.HTTPError, urllib.error.URLError) as e:
                         logerr("failed attempt %s of %s to get data: %s" %
@@ -335,7 +338,7 @@ class CloudClient(Collector):
             time.sleep(1)
 
     @staticmethod
-    def get_data(sd, device_id):
+    def get_data(sd, gm, device_id):
         """Query the server for each device and module, put data on queue"""
         raw_data = sd.get_data(device_id)
         units_dict = dict((x, raw_data['user']['administrative'][x])
@@ -355,7 +358,11 @@ class CloudClient(Collector):
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 alldata.update(data)
 #                Collector.queue.put(data)
+        print('Alldata: ', alldata)
         Collector.queue.put(alldata)
+        """Query the server for rain data with getmeasurement."""
+        rain_data = gm.get_data(device_id)
+        print('Resp: ', rain_data)
 
     @staticmethod
     def extract_data(x, units_dict):
@@ -510,6 +517,31 @@ class CloudClient(Collector):
                 if device_id:
                     params['device_id'] = device_id
                 resp = CloudClient.post_request(CloudClient.DATA_URL, params)
+                self._raw_data = dict(resp['body'])
+                self._last_update = int(time.time())
+            return self._raw_data
+
+    class StationMeasure(object):
+        """ Get full rain data through a get measurement call."""
+        def __init__(self, auth):
+            self._auth = auth
+            self._last_update = 0
+            self._raw_data = dict()
+
+        def get_data(self, device_id=None, stale=300):
+            if int(time.time()) - self._last_update > stale:
+                date_begin = int(datetime.datetime.now().timestamp()) - 20 * 60
+                params = {'access_token': self._auth.access_token}
+                params['device_id'] = "70:ee:50:2c:d3:d6"
+                params['module_id'] = "05:00:00:04:64:b0"
+                params['scale'] = 'max'
+                params['type'] = 'rain'
+                params['date_begin'] = date_begin
+                #  "&date_end=" + date_end +
+                #  "&limit=" + limit +
+                params['optimize'] = 'false'
+                params['real_time'] = 'true'
+                resp = CloudClient.post_request(CloudClient.GETM_URL, params)
                 self._raw_data = dict(resp['body'])
                 self._last_update = int(time.time())
             return self._raw_data

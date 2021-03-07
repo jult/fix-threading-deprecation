@@ -169,10 +169,13 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
             password = stn_dict['password']
             client_id = stn_dict['client_id']
             client_secret = stn_dict['client_secret']
+            gm_device_id = stn_dict.get('gm_device_id', None)
+            gm_node_id = stn_dict.get('gm_node_id', None)
             self.collector = CloudClient(
                 username, password, client_id, client_secret,
                 device_id=device_id, poll_interval=poll_interval,
-                max_tries=max_tries, retry_wait=retry_wait)
+                max_tries=max_tries, retry_wait=retry_wait,
+                gm_device_id=gm_device_id, gm_node_id=gm_node_id)
         else:
             raise ValueError("unsupported mode '%s'" % mode)
         self.collector.startup()
@@ -299,7 +302,8 @@ class CloudClient(Collector):
         'firmware', 'last_setup', 'last_upgrade', 'date_setup']
 
     def __init__(self, username, password, client_id, client_secret,
-                 device_id=None, poll_interval=300, max_tries=3, retry_wait=30):
+                 device_id=None, poll_interval=300, max_tries=3, retry_wait=30,
+                 gm_device_id=None, gm_node_id=None):
         self._poll_interval = poll_interval
         self._max_tries = max_tries
         self._retry_wait = retry_wait
@@ -310,6 +314,7 @@ class CloudClient(Collector):
         self._gm = CloudClient.StationMeasure(self._auth)
         self._thread = None
         self._collect_data = False
+        self._gm_info = [0, 0, gm_device_id, gm_node_id]
 
     def collect_data(self):
         """Loop forever, wake up periodically to see if it is time to quit."""
@@ -319,7 +324,7 @@ class CloudClient(Collector):
             if now - last_poll > self._poll_interval:
                 for tries in range(self._max_tries):
                     try:
-                        CloudClient.get_data(self._sd, self._gm, self._device_id)
+                        CloudClient.get_data(self._sd, self._gm, self._device_id, self._gm_info)
                         break
                     except (socket.error, socket.timeout, urllib.error.HTTPError, urllib.error.URLError) as e:
                         logerr("failed attempt %s of %s to get data: %s" %
@@ -338,7 +343,7 @@ class CloudClient(Collector):
             time.sleep(1)
 
     @staticmethod
-    def get_data(sd, gm, device_id):
+    def get_data(sd, gm, device_id, gm_info):
         """Query the server for each device and module, put data on queue"""
         raw_data = sd.get_data(device_id)
         units_dict = dict((x, raw_data['user']['administrative'][x])
@@ -355,14 +360,41 @@ class CloudClient(Collector):
 #            Collector.queue.put(data)
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
+                if data['_id'] == gm_info[3]:
+                    print('Before: ', data)
+                    actrain = data['time_utc']                 # actual time of measurement
+                    print('_id: ', data['_id'])
+                    print('time_utc: ', actrain)
+                    save_id = m['_id']
+                    save_type = m['type']
+                    if gm_info[0] == actrain:
+                        print('removed rain data')
+                        del data['Rain']                        # data already written, write no duplicate
+                    else:
+                        print('Rain: ', data['Rain'])
+                    gm_info[0] = actrain                       # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
+                # print('Labeled Data: ', data)
                 alldata.update(data)
 #                Collector.queue.put(data)
         print('Alldata: ', alldata)
         Collector.queue.put(alldata)
         """Query the server for rain data with getmeasurement."""
-        rain_data = gm.get_data(device_id)
+        rain_data = gm.get_data(gm_info[2], gm_info[3])
         print('Resp: ', rain_data)
+        rain_data_times = [int(x) for x in rain_data.keys()]
+        rain_data_times.sort(reverse=True)
+        if rain_data_times[0] == gm_info[0]:                   # last measurement is the same time, OK
+            if rain_data_times[1] == gm_info[1]:
+                print('Additional Rain data already written')
+            else:
+                # print(f'Additional rain data {rain_data[str(rain_data_times[1])][0]} will be written')
+                data = {'time_utc': rain_data_times[1], 'Rain': rain_data[str(rain_data_times[1])][0]}
+                data = CloudClient.apply_labels(data, save_id, save_type)
+                print('Add rain data: ', data)
+                Collector.queue.put(data)
+                gm_info[1] = rain_data_times[1]                # save last written date
+
 
     @staticmethod
     def extract_data(x, units_dict):
@@ -528,12 +560,12 @@ class CloudClient(Collector):
             self._last_update = 0
             self._raw_data = dict()
 
-        def get_data(self, device_id=None, stale=300):
+        def get_data(self, device_id, module_id, stale=300):
             if int(time.time()) - self._last_update > stale:
-                date_begin = int(datetime.datetime.now().timestamp()) - 20 * 60
+                date_begin = int(datetime.datetime.now().timestamp()) - 30 * 60
                 params = {'access_token': self._auth.access_token}
-                params['device_id'] = "70:ee:50:2c:d3:d6"
-                params['module_id'] = "05:00:00:04:64:b0"
+                params['device_id'] = device_id
+                params['module_id'] = module_id
                 params['scale'] = 'max'
                 params['type'] = 'rain'
                 params['date_begin'] = date_begin
@@ -631,6 +663,10 @@ if __name__ == "__main__":
                           help='client_id for cloud mode')
         parser.add_option('--client-secret', dest='cs', metavar='CLIENT_SECRET',
                           help='client_secret for cloud mode')
+        parser.add_option('--gm-device-id', dest='gmdid', metavar='GMDID',
+                          help='getmeasurement device-id')
+        parser.add_option('--gm-node-id', dest='gmnid', metavar='GMNID',
+                          help='getmeasurement node-id')
         parser.add_option('--get-stn-data', dest='sdata', action='store_true',
                           help='get formatted station data from cloud')
         parser.add_option('--get-json-data', dest='jdata', action='store_true',
@@ -643,7 +679,7 @@ if __name__ == "__main__":
         if opts.ts:
             run_packet_driver()
         if opts.tc:
-            run_cloud_driver(opts.username, opts.password, opts.ci, opts.cs)
+            run_cloud_driver(opts.username, opts.password, opts.ci, opts.cs, opts.gmdid, opts.gmnid)
         if opts.tp:
             test_parse(options.tp)
         if opts.sdata:
@@ -657,13 +693,14 @@ if __name__ == "__main__":
         for pkt in driver.genLoopPackets():
             print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
 
-    def run_cloud_driver(username, password, c_id, c_secret):
+    def run_cloud_driver(username, password, c_id, c_secret, gmdid, gmnid):
         import weeutil.weeutil
         driver = None
         try:
             driver = NetatmoDriver(mode='cloud',
                                    username=username, password=password,
-                                   client_id=c_id, client_secret=c_secret)
+                                   client_id=c_id, client_secret=c_secret,
+                                   gm_device_id=gmdid, gm_node_id=gmnid)
             for pkt in driver.genLoopPackets():
                 print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
         except KeyboardInterrupt:

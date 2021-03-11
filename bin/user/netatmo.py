@@ -25,17 +25,27 @@ As of april 2016 that means the base station, 'outside' T/H, additional T/H,
 rain, and wind.
 """
 
+import sys
+try:
+    import queue                                        # Python 3
+except:
+    import Queue                                        # Python 2
 
-import queue
 import json
 import re
 import socket
 import syslog
 import threading
-import datetime
+# import datetime
 import time
-from urllib.parse import urlencode
-import urllib.request, urllib.error, urllib.parse
+try:
+    from urllib.parse import urlencode
+except:
+    from urllib import urlencode
+try:
+    import urllib.request, urllib.error, urllib.parse
+except:
+    import urllib2
 
 import weewx.drivers
 import weewx.engine
@@ -43,8 +53,10 @@ import weewx.units
 import weewx.wxformulas
 import weeutil.weeutil
 
+pvers = sys.version_info.major
+
 DRIVER_NAME = 'netatmo'
-DRIVER_VERSION = "0.14"
+DRIVER_VERSION = "0.15"
 
 INHG_PER_MBAR = 0.0295299830714
 MPH_TO_KPH = 1.60934
@@ -196,7 +208,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
                 logdbg('packet: %s' % pkt)
                 if pkt:
                     yield pkt
-            except queue.Empty:
+            except queue.Empty if pvers == 3 else Queue.Empty:
                 pass
 
     def data_to_packet(self, data):
@@ -235,7 +247,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
 
 
 class Collector(object):
-    queue = queue.Queue()
+    queue = queue.Queue() if pvers == 3 else Queue.Queue()
 
     def startup(self):
         pass
@@ -278,11 +290,11 @@ class CloudClient(Collector):
 
     # mapping between observation name and function used to convert it
     CONVERSIONS = {
-#        'Temperature': '_cvt_temperature',
-#        'AbsolutePressure': '_cvt_pressure',
-#        'Pressure': '_cvt_pressure',
-#        'WindStrength': '_cvt_speed',
-#        'GustStrength': '_cvt_speed',
+        #    'Temperature': '_cvt_temperature',
+        #    'AbsolutePressure': '_cvt_pressure',
+        #    'Pressure': '_cvt_pressure',
+        #    'WindStrength': '_cvt_speed',
+        #    'GustStrength': '_cvt_speed',
         'Rain': '_cvt_rain',
         'sum_rain_24': '_cvt_rain',
         'sum_rain_1': '_cvt_rain'}
@@ -326,7 +338,9 @@ class CloudClient(Collector):
                     try:
                         CloudClient.get_data(self._sd, self._gm, self._device_id, self._gm_info)
                         break
-                    except (socket.error, socket.timeout, urllib.error.HTTPError, urllib.error.URLError) as e:
+                    except (socket.error, socket.timeout,
+                            urllib.error.HTTPError if pvers == 3 else urllib2.HTTPError,
+                            urllib.error.URLError if pvers == 3 else urllib2.URLError) as e:
                         logerr("failed attempt %s of %s to get data: %s" %
                                (tries + 1, self._max_tries, e))
                         logdbg("waiting %s seconds before retry" %
@@ -361,37 +375,30 @@ class CloudClient(Collector):
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
                 if data['_id'] == gm_info[3]:
-                    print('Before: ', data)
                     actrain = data['time_utc']                 # actual time of measurement
-                    print('_id: ', data['_id'])
-                    print('time_utc: ', actrain)
                     save_id = m['_id']
                     save_type = m['type']
-                    if gm_info[0] == actrain:
-                        print('removed rain data')
+                    if gm_info[0] == actrain:                   # remove rain data if already posted
                         del data['Rain']                        # data already written, write no duplicate
-                    else:
-                        print('Rain: ', data['Rain'])
                     gm_info[0] = actrain                       # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 # print('Labeled Data: ', data)
                 alldata.update(data)
 #                Collector.queue.put(data)
-        print('Alldata: ', alldata)
+        logdbg('Alldata: %s' % alldata)
         Collector.queue.put(alldata)
         """Query the server for rain data with getmeasurement."""
         rain_data = gm.get_data(gm_info[2], gm_info[3])
-        print('Resp: ', rain_data)
+        logdbg('Resp: %s' % rain_data)
         rain_data_times = [int(x) for x in rain_data.keys()]
         rain_data_times.sort(reverse=True)
-        if rain_data_times[0] == gm_info[0]:                   # last measurement is the same time, OK
-            if rain_data_times[1] == gm_info[1]:
-                print('Additional Rain data already written')
-            else:
-                # print(f'Additional rain data {rain_data[str(rain_data_times[1])][0]} will be written')
-                data = {'time_utc': rain_data_times[1], 'Rain': rain_data[str(rain_data_times[1])][0]}
+        if rain_data_times[0] == gm_info[0]:                    # last measurement is the same time, OK
+            if rain_data_times[1] == gm_info[1]:                # data already written?
+                pass                                            # yes, do nothing
+            else:                                               # no, prepare for next loop record
+                # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
+                data = {'time_utc': rain_data_times[1], 'Rain': (rain_data[str(rain_data_times[1])][0]) * 0.1}
                 data = CloudClient.apply_labels(data, save_id, save_type)
-                print('Add rain data: ', data)
                 Collector.queue.put(data)
                 gm_info[1] = rain_data_times[1]                # save last written date
 
@@ -562,7 +569,8 @@ class CloudClient(Collector):
 
         def get_data(self, device_id, module_id, stale=300):
             if int(time.time()) - self._last_update > stale:
-                date_begin = int(datetime.datetime.now().timestamp()) - 30 * 60
+                # date_begin = int(datetime.datetime.now().timestamp()) - 30 * 60
+                date_begin = int(time.time()) - 30 * 60
                 params = {'access_token': self._auth.access_token}
                 params['device_id'] = device_id
                 params['module_id'] = module_id
@@ -586,8 +594,10 @@ class CloudClient(Collector):
         headers = {
             "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"}
         logdbg("url: %s data: %s hdr: %s" % (url, params, headers))
-        req = urllib.request.Request(url=url, data=params, headers=headers)
-        resp = urllib.request.urlopen(req).read(65535)
+        req = urllib.request.Request(url=url, data=params, headers=headers) if pvers == 3 else \
+            urllib2.Request(url=url, data=params, headers=headers)
+        resp = urllib.request.urlopen(req).read(65535) if pvers == 3 else \
+            urllib2.urlopen(req).read(65535)
         resp_obj = json.loads(resp)
         logdbg("resp_obj: %s" % resp_obj)
         return resp_obj

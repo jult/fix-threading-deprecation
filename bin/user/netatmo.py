@@ -395,7 +395,8 @@ class CloudClient(Collector):
             else:                                               # no, prepare for adding rain amount
                 # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
                 # add the additional rain data to the entry "Rain" in collected data
-                alldata[f'{save_id}.{save_type}.''Rain'''] += (rain_data[str(rain_data_times[1])][0]) * 0.1
+                rainindex = save_id + "." + save_type + ".Rain"
+                alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
                 gm_info[1] = rain_data_times[1]                # save last written date
         logdbg('Alldata: %s' % alldata)
         Collector.queue.put(alldata)                            # now write the modified record

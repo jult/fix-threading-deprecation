@@ -375,18 +375,15 @@ class CloudClient(Collector):
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
                 if data['_id'] == gm_info[3]:
-                    actrain = data['time_utc']                 # actual time of measurement
+                    actrain = data['time_utc']                  # actual time of measurement
                     save_id = m['_id']
                     save_type = m['type']
                     if gm_info[0] == actrain:                   # remove rain data if already posted
-                        del data['Rain']                        # data already written, write no duplicate
-                    gm_info[0] = actrain                       # save last posted raindata time
+                        data['Rain'] = 0.0                      # data already written, reset/set to zero
+                    gm_info[0] = actrain                        # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
-                # print('Labeled Data: ', data)
                 alldata.update(data)
-#                Collector.queue.put(data)
-        logdbg('Alldata: %s' % alldata)
-        Collector.queue.put(alldata)
+        # Collector.queue.put(alldata)
         """Query the server for rain data with getmeasurement."""
         rain_data = gm.get_data(gm_info[2], gm_info[3])
         logdbg('Resp: %s' % rain_data)
@@ -395,13 +392,13 @@ class CloudClient(Collector):
         if rain_data_times[0] == gm_info[0]:                    # last measurement is the same time, OK
             if rain_data_times[1] == gm_info[1]:                # data already written?
                 pass                                            # yes, do nothing
-            else:                                               # no, prepare for next loop record
+            else:                                               # no, prepare for adding rain amount
                 # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
-                data = {'time_utc': rain_data_times[1], 'Rain': (rain_data[str(rain_data_times[1])][0]) * 0.1}
-                data = CloudClient.apply_labels(data, save_id, save_type)
-                Collector.queue.put(data)
+                # add the additional rain data to the entry "Rain" in collected data
+                alldata[f'{save_id}.{save_type}.''Rain'''] += (rain_data[str(rain_data_times[1])][0]) * 0.1
                 gm_info[1] = rain_data_times[1]                # save last written date
-
+        logdbg('Alldata: %s' % alldata)
+        Collector.queue.put(alldata)                            # now write the modified record
 
     @staticmethod
     def extract_data(x, units_dict):

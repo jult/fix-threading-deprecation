@@ -28,15 +28,17 @@ This fork aims to be compatible with weewx 4.* and has been "rewritten" in Pytho
 This is a fork from bricebou/weewx-netatmo fork.
 Changes:
 * This code should work with Python 2.7 und 3.x (running with weewx<4 and weewx=4.x)
-* This code was changed (deeply changed and not rewritten!!) to support the wired netatmo API on /getstation call
-which does not return all "RAIN" data. Rain data is created every five minutes, but the NETATMO API is only returning
-the data in 10 minutes intervals on the /getstation call with only the last measurement included. So we are missing
-the data in between which leads to different rain summaries in weewx/wunderground/... in opposite to the
-NETATMO statistics (i.e. daily rain will be less in weewx as on NETATMO site). The only way to get all data is using
-the /getmeasurement call. I included in addition to the /getstation call also an /getmeasurement call and insert
-an additional LOOP record with the missing rain data. To avoid writing duplicate rain data in the 5/10 minutes interval
-(every 5 minutes NETATMO will be called, every 10 minutes an archive record will be created)
-i also added a logic for remembering already written rain informations and remove them from LOOP packets.
+* This code was changed (deeply changed and not rewritten!!) to support the weired netatmo API on /getstation call
+  which does not return all "RAIN" data. Rain data is created every five minutes, but the NETATMO API is only returning
+  the data in 10 minutes intervals on the /getstation call with only the last measurement included. So we are missing
+  the data in between which leads to different rain summaries in weewx/wunderground/... in opposite to the
+  NETATMO statistics (i.e. daily rain will be less in weewx as on NETATMO site). The only way to get all data is using
+  the /getmeasurement call. I included in addition to the /getstation call also an /getmeasurement call and add
+  the additional rain data directly into the generated collection/loop record. 
+* To avoid writing duplicated rain data in the 5/10 minutes interval (by default the netatmo module generates two
+  LOOP records within 1 archive record generation which leads to a duplication of rain data, as the rain data is 
+  accumulated by weewx.) i also added a logic for remembering already written rain data and reset them to "0" 
+  in the LOOP packets if already written in the previous LOOP packet.
 * Added two new configuration Parameters,
   * gm_device_id (MAC of the NETATMO main station) and
   * gm_node_id (MAC of the "rain" Module)

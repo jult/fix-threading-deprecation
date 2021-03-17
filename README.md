@@ -39,9 +39,9 @@ Changes:
   LOOP records within 1 archive record generation which leads to a duplication of rain data, as the rain data is 
   accumulated by weewx.) i also added a logic for remembering already written rain data and reset them to "0" 
   in the LOOP packets if already written in the previous LOOP packet.
-* ~~Added two new configuration Parameters,
-  * gm_device_id (MAC of the NETATMO main station) and
-  * gm_node_id (MAC of the "rain" Module)~~
+* ~~Added two new configuration Parameters,~~
+  * ~~gm_device_id (MAC of the NETATMO main station) and~~
+  * ~~gm_node_id (MAC of the "rain" Module)~~
 * previous parameters (gm_device_id, gm_node_id) no longer needed  
 * Autodetection of Rain Module(s)
 * Handling of multiple rain modules

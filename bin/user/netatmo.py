@@ -377,7 +377,7 @@ class CloudClient(Collector):
                     curr_station = d['_id']
                     if not curr_station in gm_info:
                         gm_info[curr_station] = {'module': m['_id'], 'type': m['type'], 'lastp': 0, 'lasta': 0}
-                        loginf('Found Rain Module %s for correction' % gm_info[curr_station]['module'])
+                        print('Found Rain Module %s for correction' % gm_info[curr_station]['module'])
                     actrain = data['time_utc']                          # actual time of measurement
                     if gm_info[curr_station]['lastp'] == actrain:       # remove rain data if already posted
                         data['Rain'] = 0.0                              # data already written, reset/set to zero

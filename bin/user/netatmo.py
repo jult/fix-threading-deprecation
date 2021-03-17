@@ -399,7 +399,7 @@ class CloudClient(Collector):
                     # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
                     # add the additional rain data to the entry "Rain" in collected data
                     rainindex = gm_info[station]['module'] + "." + gm_info[station]['type'] + ".Rain"
-                    logdbg(f'Modified rain data for %s' % rainindex)
+                    logdbg('Modified rain data for %s' % rainindex)
                     alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
                     gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
         logdbg('Alldata: %s' % alldata)

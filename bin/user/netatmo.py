@@ -27,7 +27,7 @@ rain, and wind.
 
 import sys
 try:
-    import queue                                        # Python 3
+    import queue as Queue                                      # Python 3
 except:
     import Queue                                        # Python 2
 
@@ -42,6 +42,7 @@ try:
     from urllib.parse import urlencode
 except:
     from urllib import urlencode
+
 try:
     import urllib.request, urllib.error, urllib.parse
 except:
@@ -56,7 +57,7 @@ import weeutil.weeutil
 pvers = sys.version_info.major
 
 DRIVER_NAME = 'netatmo'
-DRIVER_VERSION = "0.15"
+DRIVER_VERSION = "0.16"
 
 INHG_PER_MBAR = 0.0295299830714
 MPH_TO_KPH = 1.60934
@@ -186,8 +187,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
             self.collector = CloudClient(
                 username, password, client_id, client_secret,
                 device_id=device_id, poll_interval=poll_interval,
-                max_tries=max_tries, retry_wait=retry_wait,
-                gm_device_id=gm_device_id, gm_node_id=gm_node_id)
+                max_tries=max_tries, retry_wait=retry_wait)
         else:
             raise ValueError("unsupported mode '%s'" % mode)
         self.collector.startup()
@@ -208,7 +208,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
                 logdbg('packet: %s' % pkt)
                 if pkt:
                     yield pkt
-            except queue.Empty if pvers == 3 else Queue.Empty:
+            except Queue.Empty:
                 pass
 
     def data_to_packet(self, data):
@@ -247,7 +247,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
 
 
 class Collector(object):
-    queue = queue.Queue() if pvers == 3 else Queue.Queue()
+    queue = Queue.Queue()
 
     def startup(self):
         pass
@@ -314,8 +314,7 @@ class CloudClient(Collector):
         'firmware', 'last_setup', 'last_upgrade', 'date_setup']
 
     def __init__(self, username, password, client_id, client_secret,
-                 device_id=None, poll_interval=300, max_tries=3, retry_wait=30,
-                 gm_device_id=None, gm_node_id=None):
+                 device_id=None, poll_interval=300, max_tries=3, retry_wait=30):
         self._poll_interval = poll_interval
         self._max_tries = max_tries
         self._retry_wait = retry_wait
@@ -326,7 +325,7 @@ class CloudClient(Collector):
         self._gm = CloudClient.StationMeasure(self._auth)
         self._thread = None
         self._collect_data = False
-        self._gm_info = [0, 0, gm_device_id, gm_node_id]
+        self._gm_info = {}
 
     def collect_data(self):
         """Loop forever, wake up periodically to see if it is time to quit."""
@@ -374,30 +373,35 @@ class CloudClient(Collector):
 #            Collector.queue.put(data)
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
-                if data['_id'] == gm_info[3]:
-                    actrain = data['time_utc']                  # actual time of measurement
-                    save_id = m['_id']
-                    save_type = m['type']
-                    if gm_info[0] == actrain:                   # remove rain data if already posted
-                        data['Rain'] = 0.0                      # data already written, reset/set to zero
-                    gm_info[0] = actrain                        # save last posted raindata time
+                if m['type'] == 'NAModule3':                            # is it rain Module?
+                    curr_station = d['_id']
+                    if not curr_station in gm_info:
+                        gm_info[curr_station] = {'module': m['_id'], 'type': m['type'], 'lastp': 0, 'lasta': 0}
+                        loginf('Found Rain Module %s for correction' % gm_info[curr_station]['module'])
+                    actrain = data['time_utc']                          # actual time of measurement
+                    if gm_info[curr_station]['lastp'] == actrain:       # remove rain data if already posted
+                        data['Rain'] = 0.0                              # data already written, reset/set to zero
+                        logdbg('Duplicate detected. Modified rain to 0.0')
+                    gm_info[curr_station]['lastp'] = actrain            # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 alldata.update(data)
         # Collector.queue.put(alldata)
         """Query the server for rain data with getmeasurement."""
-        rain_data = gm.get_data(gm_info[2], gm_info[3])
-        logdbg('Resp: %s' % rain_data)
-        rain_data_times = [int(x) for x in rain_data.keys()]
-        rain_data_times.sort(reverse=True)
-        if rain_data_times[0] == gm_info[0]:                    # last measurement is the same time, OK
-            if rain_data_times[1] == gm_info[1]:                # data already written?
-                pass                                            # yes, do nothing
-            else:                                               # no, prepare for adding rain amount
-                # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
-                # add the additional rain data to the entry "Rain" in collected data
-                rainindex = save_id + "." + save_type + ".Rain"
-                alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
-                gm_info[1] = rain_data_times[1]                # save last written date
+        for station in gm_info:
+            rain_data = gm.get_data(station, gm_info[station]['module'])
+            logdbg('getmeasurement Resp: %s' % rain_data)
+            rain_data_times = [int(x) for x in rain_data.keys()]
+            rain_data_times.sort(reverse=True)
+            if rain_data_times[0] == gm_info[station]['lastp']:         # last measurement is the same time, OK
+                if rain_data_times[1] == gm_info[station]['lasta']:     # data already written?
+                    pass                                                # yes, do nothing
+                else:                                                   # no, prepare for adding rain amount
+                    # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
+                    # add the additional rain data to the entry "Rain" in collected data
+                    rainindex = gm_info[station]['module'] + "." + gm_info[station]['type'] + ".Rain"
+                    logdbg(f'Modified rain data for %s' % rainindex)
+                    alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
+                    gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
         logdbg('Alldata: %s' % alldata)
         Collector.queue.put(alldata)                            # now write the modified record
 
@@ -671,10 +675,6 @@ if __name__ == "__main__":
                           help='client_id for cloud mode')
         parser.add_option('--client-secret', dest='cs', metavar='CLIENT_SECRET',
                           help='client_secret for cloud mode')
-        parser.add_option('--gm-device-id', dest='gmdid', metavar='GMDID',
-                          help='getmeasurement device-id')
-        parser.add_option('--gm-node-id', dest='gmnid', metavar='GMNID',
-                          help='getmeasurement node-id')
         parser.add_option('--get-stn-data', dest='sdata', action='store_true',
                           help='get formatted station data from cloud')
         parser.add_option('--get-json-data', dest='jdata', action='store_true',
@@ -687,7 +687,7 @@ if __name__ == "__main__":
         if opts.ts:
             run_packet_driver()
         if opts.tc:
-            run_cloud_driver(opts.username, opts.password, opts.ci, opts.cs, opts.gmdid, opts.gmnid)
+            run_cloud_driver(opts.username, opts.password, opts.ci, opts.cs)
         if opts.tp:
             test_parse(options.tp)
         if opts.sdata:
@@ -701,14 +701,13 @@ if __name__ == "__main__":
         for pkt in driver.genLoopPackets():
             print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
 
-    def run_cloud_driver(username, password, c_id, c_secret, gmdid, gmnid):
+    def run_cloud_driver(username, password, c_id, c_secret):
         import weeutil.weeutil
         driver = None
         try:
             driver = NetatmoDriver(mode='cloud',
                                    username=username, password=password,
-                                   client_id=c_id, client_secret=c_secret,
-                                   gm_device_id=gmdid, gm_node_id=gmnid)
+                                   client_id=c_id, client_secret=c_secret)
             for pkt in driver.genLoopPackets():
                 print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
         except KeyboardInterrupt:

@@ -57,7 +57,7 @@ import weeutil.weeutil
 pvers = sys.version_info.major
 
 DRIVER_NAME = 'netatmo'
-DRIVER_VERSION = "0.16"
+DRIVER_VERSION = "0.17"
 
 INHG_PER_MBAR = 0.0295299830714
 MPH_TO_KPH = 1.60934
@@ -552,7 +552,7 @@ class CloudClient(Collector):
             self._last_update = 0
             self._raw_data = dict()
 
-        def get_data(self, device_id=None, stale=300):
+        def get_data(self, device_id=None, stale=60):               # changed to 60 from 300 to avoid missing data
             if int(time.time()) - self._last_update > stale:
                 params = {'access_token': self._auth.access_token}
                 if device_id:
@@ -569,7 +569,7 @@ class CloudClient(Collector):
             self._last_update = 0
             self._raw_data = dict()
 
-        def get_data(self, device_id, module_id, stale=300):
+        def get_data(self, device_id, module_id, stale=60):         # changed to 60 from 300 to avoid missing data
             if int(time.time()) - self._last_update > stale:
                 # date_begin = int(datetime.datetime.now().timestamp()) - 30 * 60
                 date_begin = int(time.time()) - 30 * 60

@@ -4,8 +4,10 @@
 
 from setup import ExtensionInstaller
 
+
 def loader():
     return NetatmoInstaller()
+
 
 class NetatmoInstaller(ExtensionInstaller):
     def __init__(self):
@@ -22,7 +24,7 @@ class NetatmoInstaller(ExtensionInstaller):
                     'client_id': 'INSERT_CLIENT_ID_HERE',
                     'client_secret': 'INSERT_CLIENT_SECRET_HERE',
                     'driver': 'user.netatmo',
-                    }
-                },
+                }
+            },
             files=[('bin/user', ['bin/user/netatmo.py'])]
-            )
+        )

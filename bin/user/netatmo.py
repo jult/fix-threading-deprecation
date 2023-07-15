@@ -25,7 +25,6 @@ As of april 2016 that means the base station, 'outside' T/H, additional T/H,
 rain, and wind.
 """
 
-
 import queue
 import json
 import re
@@ -57,11 +56,14 @@ def logmsg(level, msg):
     syslog.syslog(level, 'netatmo: %s: %s' %
                   (threading.currentThread().getName(), msg))
 
+
 def logdbg(msg):
     logmsg(syslog.LOG_DEBUG, msg)
 
+
 def loginf(msg):
     logmsg(syslog.LOG_INFO, msg)
+
 
 def logerr(msg):
     logmsg(syslog.LOG_ERR, msg)
@@ -69,6 +71,7 @@ def logerr(msg):
 
 def loader(config_dict, engine):
     return NetatmoDriver(**config_dict[DRIVER_NAME])
+
 
 def confeditor_loader():
     return NetatmoConfEditor()
@@ -87,8 +90,7 @@ class NetatmoConfEditor(weewx.drivers.AbstractConfEditor):
     mode = cloud
 
     # The cloud mode requires credentials:
-    username = INSERT_USERNAME_HERE
-    password = INSERT_PASSWORD_HERE
+    refresh_token = INSERT_REFRESH_TOKEN_HERE
     client_id = INSERT_CLIENT_ID_HERE
     client_secret = INSERT_CLIENT_SECRET_HERE
 
@@ -101,13 +103,11 @@ class NetatmoConfEditor(weewx.drivers.AbstractConfEditor):
         print("Specify the mode for obtaining data, either 'cloud' or 'sniff'")
         settings['mode'] = self._prompt('mode', 'cloud', ['cloud', 'sniff'])
         if settings['mode'] == 'cloud':
-            print("Specify the username for netatmo.com")
-            self._prompt('username')
-            print("Specify the password for netatmo.com")
-            self._prompt('password')
-            print("Specify the client_id from dev.netatmo.com")
+            print("Specify the refresh token for netatmo.com")
+            self._prompt('refresh_token')
+            print("Specify the client id for netatmo.com")
             self._prompt('client_id')
-            print("Specify the client_secret from dev.netatmo.com")
+            print("Specify the client secret for netatmo.com")
             self._prompt('client_secret')
         return settings
 
@@ -119,34 +119,34 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
     # apparently battery_vp is in older firmware, whereas battery_percent is
     # in newer firmware.
     DEFAULT_SENSOR_MAP = {
-        'pressure':             '*.NAMain.AbsolutePressure',
-        'inTemp':               '*.NAMain.Temperature',
-        'inHumidity':           '*.NAMain.Humidity',
-        'co2':                  '*.NAMain.CO2',
-        'noise':                '*.NAMain.Noise',
-        'wifi_status':          '*.NAMain.wifi_status',
-        'outTemp':              '*.NAModule1.Temperature',
-        'outHumidity':          '*.NAModule1.Humidity',
-        'out_rf_status':        '*.NAModule1.rf_status',
-        'out_battery_vp':       '*.NAModule1.battery_vp',
+        'pressure': '*.NAMain.AbsolutePressure',
+        'inTemp': '*.NAMain.Temperature',
+        'inHumidity': '*.NAMain.Humidity',
+        'co2': '*.NAMain.CO2',
+        'noise': '*.NAMain.Noise',
+        'wifi_status': '*.NAMain.wifi_status',
+        'outTemp': '*.NAModule1.Temperature',
+        'outHumidity': '*.NAModule1.Humidity',
+        'out_rf_status': '*.NAModule1.rf_status',
+        'out_battery_vp': '*.NAModule1.battery_vp',
         'outTempBatteryStatus': '*.NAModule1.battery_percent',
-        'extraTemp1':           '*.NAModule4.Temperature',
-        'extraHumid1':          '*.NAModule4.Humidity',
-        'extra_rf_status_1':    '*.NAModule4.rf_status',
-        'extra_battery_vp_1':   '*.NAModule4.battery_vp',
-        'extra1BatteryStatus':  '*.NAModule4.battery_percent',
-        'windSpeed':            '*.NAModule2.WindStrength',
-        'windDir':              '*.NAModule2.WindAngle',
-        'windGust':             '*.NAModule2.GustStrength',
-        'windGustDir':          '*.NAModule2.GustAngle',
-        'wind_rf_status':       '*.NAModule2.rf_status',
-        'wind_battery_vp':      '*.NAModule2.battery_vp',
-        'windBatteryStatus':    '*.NAModule2.battery_percent',
-        'rain':                 '*.NAModule3.Rain',
-        'rain_total':           '*.NAModule3.sum_rain_24',
-        'rain_rf_status':       '*.NAModule3.rf_status',
-        'rain_battery_vp':      '*.NAModule3.battery_vp',
-        'rainBatteryStatus':    '*.NAModule3.battery_percent'}
+        'extraTemp1': '*.NAModule4.Temperature',
+        'extraHumid1': '*.NAModule4.Humidity',
+        'extra_rf_status_1': '*.NAModule4.rf_status',
+        'extra_battery_vp_1': '*.NAModule4.battery_vp',
+        'extra1BatteryStatus': '*.NAModule4.battery_percent',
+        'windSpeed': '*.NAModule2.WindStrength',
+        'windDir': '*.NAModule2.WindAngle',
+        'windGust': '*.NAModule2.GustStrength',
+        'windGustDir': '*.NAModule2.GustAngle',
+        'wind_rf_status': '*.NAModule2.rf_status',
+        'wind_battery_vp': '*.NAModule2.battery_vp',
+        'windBatteryStatus': '*.NAModule2.battery_percent',
+        'rain': '*.NAModule3.Rain',
+        'rain_total': '*.NAModule3.sum_rain_24',
+        'rain_rf_status': '*.NAModule3.rf_status',
+        'rain_battery_vp': '*.NAModule3.battery_vp',
+        'rainBatteryStatus': '*.NAModule3.battery_percent'}
 
     def __init__(self, **stn_dict):
         loginf("driver version is %s" % DRIVER_VERSION)
@@ -162,14 +162,13 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
             self.collector = PacketSniffer((addr, port))
         elif mode.lower() == 'cloud':
             max_tries = int(stn_dict.get('max_tries', 5))
-            retry_wait = int(stn_dict.get('retry_wait', 10)) # seconds
-            poll_interval = int(stn_dict.get('poll_interval', 300)) # seconds
-            username = stn_dict['username']
-            password = stn_dict['password']
+            retry_wait = int(stn_dict.get('retry_wait', 10))  # seconds
+            poll_interval = int(stn_dict.get('poll_interval', 300))  # seconds
+            refresh_token = stn_dict['refresh_token']
             client_id = stn_dict['client_id']
             client_secret = stn_dict['client_secret']
             self.collector = CloudClient(
-                username, password, client_id, client_secret,
+                refresh_token, client_id, client_secret,
                 device_id=device_id, poll_interval=poll_interval,
                 max_tries=max_tries, retry_wait=retry_wait)
         else:
@@ -216,8 +215,8 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
             if len(kparts) != 3:
                 return None
             if (NetatmoDriver._part_match(pparts[0], kparts[0]) and
-                NetatmoDriver._part_match(pparts[1], kparts[1]) and
-                NetatmoDriver._part_match(pparts[2], kparts[2])):
+                    NetatmoDriver._part_match(pparts[1], kparts[1]) and
+                    NetatmoDriver._part_match(pparts[2], kparts[2])):
                 return k
         return None
 
@@ -273,11 +272,11 @@ class CloudClient(Collector):
 
     # mapping between observation name and function used to convert it
     CONVERSIONS = {
-#        'Temperature': '_cvt_temperature',
-#        'AbsolutePressure': '_cvt_pressure',
-#        'Pressure': '_cvt_pressure',
-#        'WindStrength': '_cvt_speed',
-#        'GustStrength': '_cvt_speed',
+        #        'Temperature': '_cvt_temperature',
+        #        'AbsolutePressure': '_cvt_pressure',
+        #        'Pressure': '_cvt_pressure',
+        #        'WindStrength': '_cvt_speed',
+        #        'GustStrength': '_cvt_speed',
         'Rain': '_cvt_rain',
         'sum_rain_24': '_cvt_rain',
         'sum_rain_1': '_cvt_rain'}
@@ -296,14 +295,14 @@ class CloudClient(Collector):
         'battery_percent',
         'firmware', 'last_setup', 'last_upgrade', 'date_setup']
 
-    def __init__(self, username, password, client_id, client_secret,
+    def __init__(self, refresh_token, client_id, client_secret,
                  device_id=None, poll_interval=300, max_tries=3, retry_wait=30):
         self._poll_interval = poll_interval
         self._max_tries = max_tries
         self._retry_wait = retry_wait
         self._device_id = device_id
-        self._auth = CloudClient.ClientAuth(
-            username, password, client_id, client_secret)
+        self._auth = CloudClient.GrantTypeAuth(
+            refresh_token, client_id, client_secret)
         self._sd = CloudClient.StationData(self._auth)
         self._thread = None
         self._collect_data = False
@@ -344,17 +343,17 @@ class CloudClient(Collector):
         # i would prefer to do partial packets, but there is no guarantee that
         # the timestamps will not align.  so aggregate into a single packet,
         # and let the driver figure out what timestamp it wants to put on it.
-        alldata = dict() # single dict with all devices and modules
+        alldata = dict()  # single dict with all devices and modules
         for d in raw_data['devices']:
             data = CloudClient.extract_data(d, units_dict)
             data = CloudClient.apply_labels(data, d['_id'], d['type'])
             alldata.update(data)
-#            Collector.queue.put(data)
+            #            Collector.queue.put(data)
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 alldata.update(data)
-#                Collector.queue.put(data)
+        #                Collector.queue.put(data)
         Collector.queue.put(alldata)
 
     @staticmethod
@@ -387,10 +386,11 @@ class CloudClient(Collector):
     def apply_labels(data, xid, xtype):
         """Copy the data dict but use fully-qualified keys"""
         return dict(("%s.%s.%s" % (xid, xtype, n), data[n]) for n in data)
-#        new_data = dict()
-#        for n in data:
-#            new_data["%s.%s.%s" % (xid, xtype, n)] = data[n]
-#        return new_data
+
+    #        new_data = dict()
+    #        for n in data:
+    #            new_data["%s.%s.%s" % (xid, xtype, n)] = data[n]
+    #        return new_data
 
     @staticmethod
     def _cvt_pressure(x, from_unit_dict):
@@ -447,46 +447,27 @@ class CloudClient(Collector):
         def run(self):
             self.client.collect_data()
 
-    class ClientAuth(object):
-        """Encapsulate the client authentication data and protocols.  This
-        object contains the username, password, client_id, and client_secret
-        that are required to obtain authorization tokens from netatmo.com.
+    class GrantTypeAuth(object):
+        """Encapsulate the authentication data and protocols.  This
+        object contains the refresh token, client_id, and client_secret
+        that are required to authenticate to the api.
+
+        The access token will be fetched on the first time so that the class can keep track of the expiration date
 
         It will re-query the netatmo server whenever the tokens have expired"""
 
-        def __init__(self, username, password, client_id, client_secret):
-            self._username = username
-            self._password = password
+        def __init__(self, refresh_token, client_id, client_secret):
+            self._refresh_token = refresh_token
             self._client_id = client_id
             self._client_secret = client_secret
+
             self._access_token = None
-            self._refresh_token = None
             self._scope = None
             self._expiration = None
 
-        def obtain_token(self):
-            params = {
-                'grant_type': 'password',
-                'client_id': self._client_id,
-                'client_secret': self._client_secret,
-                'username': self._username,
-                'password': self._password,
-                'scope': 'read_station'}
-            resp = CloudClient.post_request(CloudClient.AUTH_URL, params)
-            self._access_token = resp['access_token']
-            self._refresh_token = resp['refresh_token']
-            self._scope = resp['scope']
-            self._expiration = int(resp['expire_in'] + time.time())
-            # clear credentials cache
-            self._username = self._password = None
-
         @property
         def access_token(self):
-            if self._access_token is None:
-                self.obtain_token()
-            if self._access_token is None:
-                return None # FIXME: indicate failure
-            if self._expiration < time.time():
+            if self._expiration is None or self._expiration < time.time():
                 params = {
                     'grant_type': 'refresh_token',
                     'refresh_token': self._refresh_token,
@@ -506,21 +487,24 @@ class CloudClient(Collector):
 
         def get_data(self, device_id=None, stale=300):
             if int(time.time()) - self._last_update > stale:
-                params = {'access_token': self._auth.access_token}
+                params = {}
+                headers = {"Authorization": "Bearer " + self._auth.access_token}
                 if device_id:
                     params['device_id'] = device_id
-                resp = CloudClient.post_request(CloudClient.DATA_URL, params)
+                resp = CloudClient.post_request(CloudClient.DATA_URL, params, headers=headers)
                 self._raw_data = dict(resp['body'])
                 self._last_update = int(time.time())
             return self._raw_data
 
     @staticmethod
-    def post_request(url, params):
+    def post_request(url, params, headers=None):
         # netatmo response body size is limited to 64K
         url = CloudClient.NETATMO_URL + url
         params = urlencode(params).encode("utf-8")
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"}
+        if headers is None:
+            headers = {}
+        headers.update({
+            "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"})
         logdbg("url: %s data: %s hdr: %s" % (url, params, headers))
         req = urllib.request.Request(url=url, data=params, headers=headers)
         resp = urllib.request.urlopen(req).read(65535)
@@ -537,7 +521,6 @@ class PacketSniffer(Collector):
 
     def shutdown(self):
         pass
-
 
     class Packet(object):
         _HDR = re.compile('(\d+).(\d+) IP (\S+) > (\S+):')
@@ -577,6 +560,7 @@ class PacketSniffer(Collector):
 if __name__ == "__main__":
     usage = """%prog [options] [--help]"""
 
+
     def main():
         import optparse
         syslog.openlog('wee_netatmo', syslog.LOG_PID | syslog.LOG_CONS)
@@ -591,10 +575,8 @@ if __name__ == "__main__":
                           help='run the driver in cloud client mode')
         parser.add_option('--test-parse', dest='tp', metavar='FILENAME',
                           help='test the tcp packet parser')
-        parser.add_option('--username', dest='username', metavar='USERNAME',
-                          help='username for cloud mode')
-        parser.add_option('--password', dest='password', metavar='PASSWORD',
-                          help='password for cloud mode')
+        parser.add_option('--refresh-token', dest='refresh_token', metavar='REFRESH_TOKEN',
+                          help='refresh token for cloud mode')
         parser.add_option('--client-id', dest='ci', metavar='CLIENT_ID',
                           help='client_id for cloud mode')
         parser.add_option('--client-secret', dest='cs', metavar='CLIENT_SECRET',
@@ -611,13 +593,14 @@ if __name__ == "__main__":
         if opts.ts:
             run_packet_driver()
         if opts.tc:
-            run_cloud_driver(opts.username, opts.password, opts.ci, opts.cs)
+            run_cloud_driver(opts.refresh_token, opts.ci, opts.cs)
         if opts.tp:
             test_parse(options.tp)
         if opts.sdata:
-            get_station_data(opts.username, opts.password, opts.ci, opts.cs)
+            get_station_data(opts.refresh_token, opts.ci, opts.cs)
         if opts.jdata:
-            get_json_data(opts.username, opts.password, opts.ci, opts.cs)
+            get_json_data(opts.refresh_token, opts.ci, opts.cs)
+
 
     def run_sniff_driver():
         import weeutil.weeutil
@@ -625,28 +608,33 @@ if __name__ == "__main__":
         for pkt in driver.genLoopPackets():
             print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
 
-    def run_cloud_driver(username, password, c_id, c_secret):
+
+    def run_cloud_driver(refresh_token, c_id, c_secret):
         import weeutil.weeutil
         driver = None
         try:
             driver = NetatmoDriver(mode='cloud',
-                                   username=username, password=password,
+                                   refresh_token=refresh_token,
                                    client_id=c_id, client_secret=c_secret)
             for pkt in driver.genLoopPackets():
                 print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
         except KeyboardInterrupt:
             driver.closePort()
 
-    def get_station_data(username, password, c_id, c_secret):
-        auth = CloudClient.ClientAuth(username, password, c_id, c_secret)
+
+    def get_station_data(refresh_token, c_id, c_secret):
+        auth = CloudClient.GrantTypeAuth(refresh_token, c_id, c_secret)
         sd = CloudClient.StationData(auth)
         ppv('station data', sd.get_data())
 
-    def get_json_data(username, password, c_id, c_secret):
-        auth = CloudClient.ClientAuth(username, password, c_id, c_secret)
-        params = {'access_token': auth.access_token, 'app_type': 'app_station'}
-        reply = CloudClient.post_request(CloudClient.DATA_URL, params)
+
+    def get_json_data(refresh_token, c_id, c_secret):
+        auth = CloudClient.GrantTypeAuth(refresh_token, c_id, c_secret)
+        params = {'app_type': 'app_station'}
+        headers = {"Authorization": "Bearer " + auth.access_token}
+        reply = CloudClient.post_request(CloudClient.DATA_URL, params, headers=headers)
         print(json.dumps(reply, sort_keys=True, indent=2))
+
 
     def test_parse(filename):
         lines = []
@@ -655,19 +643,21 @@ if __name__ == "__main__":
                 lines.append(f.readline())
         print(PacketSniffer.Packet.lines2packets(''.join(lines)))
 
+
     def ppv(label, x, level=0):
         """pretty-print a variable, recursing if it is a dict"""
         indent = '  '
         if type(x) is dict:
             print("%s%s" % (indent * level, label))
             for n in x:
-                ppv(n, x[n], level=level+1)
+                ppv(n, x[n], level=level + 1)
         elif type(x) is list:
             print("%s[" % (indent * level))
             for i, y in enumerate(x):
-                ppv("%s %s" % (label, i), y, level=level+1)
+                ppv("%s %s" % (label, i), y, level=level + 1)
             print("%s]" % (indent * level))
         else:
             print("%s%s=%s" % (indent * level, label, x))
+
 
     main()

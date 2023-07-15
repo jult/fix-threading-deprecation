@@ -25,7 +25,7 @@ Installation instructions:
 
 1) download the driver:
 
-wget -O weewx-netatmo.zip https://github.com/bricebou/weewx-netatmo/archive/master.zip
+wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
 2) install the driver:
 
 sudo wee_extension --install weewx-netatmo.zip
@@ -35,7 +35,7 @@ sudo wee_extension --install weewx-netatmo.zip
 sudo wee_config --reconfigure
 
 [bricebou]
-It seems that the configuration isn't written so you have to manually edit the ``/etc/weewx/weewx.conf` file.
+It seems that the configuration isn't written so you have to manually edit the `/etc/weewx/weewx.conf` file.
 [/bricebou]
 
 4) start weewx:

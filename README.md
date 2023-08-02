@@ -47,4 +47,4 @@ For questions, bug reports, or feature requests, please create an issue on the [
 ## Contributors
 - Matthew Wall (Original Author) - [Original Repository](https://github.com/matthewwall/weewx-netatmo)
 - bricebou (Contributor) - [Original Fork](https://github.com/bricebou/weewx-netatmo)
-- jkrasinger (Contributor) - [Current Fork](https://github.com/jkrasinger/weewx-netatmo)
+- jkrasinger (Contributor) - [Merged Fork](https://github.com/jkrasinger/weewx-netatmo)

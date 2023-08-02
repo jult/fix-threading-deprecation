@@ -1,78 +1,50 @@
-netatmo - weewx driver for netatmo weather stations
-Copyright 2015 Matthew Wall
-Distributed under terms of the GPLv3
 
-This driver has two modes of operation.  It can use the netatmo API to obtain
-data from the netatmo servers, or it can parse the packets sent from a netatmo
-station.  The latter works only with netatmo firmware 101 (circa early 2015).
-Firmware 102 introduced arbitrary encryption in response to a poorly chosen
-decision to include the wifi password in network traffic sent to the netatmo
-servers.  Unfortunately, the encryption blocks end-users from accessing their
-data, while the netatmo stations might still send information such as the wifi
-password to the netatmo servers.
+# netatmo - WeeWX Driver for Netatmo Weather Stations
 
-By default this driver will operate in 'cloud' mode.
+[![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
-Communication with the netatmo servers requires 3 things: refresh_token,
-client_id, and client_secret.  The refresh token is the one you can find on your application page after creating a new token. The client_id and client_secret must be
-obtained via the dev.netatmo.com web site.  Using these 3 things, the driver
-automatically obtains and updates the tokens needed to get data from the
-server.
+## Introduction
+This is the netatmo driver for WeeWX, a free, open-source weather station software. The driver allows you to retrieve data from your Netatmo weather station and integrate it seamlessly into WeeWX.
 
-[Buco7854]
-I basically changed some data sent and the way the token was sent, I tried to keep the same logic the code followed wich I must admit did not really like.
+## Features
+- Two Modes of Operation: This driver can use the netatmo API to obtain data from the netatmo servers or parse the packets sent from a netatmo station. The latter works only with netatmo firmware 101 (circa early 2015). By default, this driver will operate in 'cloud' mode.
+- Compatibility: The driver is compatible with both Python 2.7 and 3.x and supports WeeWX 4.* versions as well as earlier versions.
+- Automatic Token Handling: Communication with the netatmo servers requires `refresh_token`, `client_id`, and `client_secret`. The `refresh_token` is the one you can find on your application page after creating a new token. The `client_id` and `client_secret` must be obtained via the dev.netatmo.com web site. Using these 3 things, the driver automatically obtains and updates the tokens needed to get data from the server.
+- Enhanced Rain Data Handling: Special logic is included to address discrepancies in rain data retrieval from the netatmo API, ensuring accurate rain summaries in WeeWX.
 
-[bricebou]
-This fork aims to be compatible with weewx 4.* and has been "rewritten" in Python 3 thanks to the `2to3` tool.
-[/bricebou]
+## ⚠️Note on Firmware 102
+Firmware 102 introduced arbitrary encryption in response to a poorly chosen decision to include the wifi password in network traffic sent to the netatmo servers. Unfortunately, the encryption blocks end-users from accessing their data, while the netatmo stations might still send information such as the wifi password to the netatmo servers.
 
-[jkrasinger]
-This is a fork from bricebou/weewx-netatmo fork.
-Changes:
-* This code should work with Python 2.7 und 3.x (running with weewx<4 and weewx=4.x)
-* This code was changed (deeply changed and not rewritten!!) to support the weired netatmo API on /getstation call
-  which does not return all "RAIN" data. Rain data is created every five minutes, but the NETATMO API is only returning
-  the data in 10 minutes intervals on the /getstation call with only the last measurement included. So we are missing
-  the data in between which leads to different rain summaries in weewx/wunderground/... in opposite to the
-  NETATMO statistics (i.e. daily rain will be less in weewx as on NETATMO site). The only way to get all data is using
-  the /getmeasurement call. I included in addition to the /getstation call also an /getmeasurement call and add
-  the additional rain data directly into the generated collection/loop record. 
-* To avoid writing duplicated rain data in the 5/10 minutes interval (by default the netatmo module generates two
-  LOOP records within 1 archive record generation which leads to a duplication of rain data, as the rain data is 
-  accumulated by weewx.) i also added a logic for remembering already written rain data and reset them to "0" 
-  in the LOOP packets if already written in the previous LOOP packet.
-* ~~Added two new configuration Parameters,~~
-  * ~~gm_device_id (MAC of the NETATMO main station) and~~
-  * ~~gm_node_id (MAC of the "rain" Module)~~
-* previous parameters (gm_device_id, gm_node_id) no longer needed  
-* Autodetection of Rain Module(s)
-* Handling of multiple rain modules
+## Installation Instructions
 
-[/jkrasinger]
+1. Download the driver:
+    ```
+    wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
+    ```
+2. Install the driver:
+    ```
+    sudo wee_extension --install weewx-netatmo.zip
+    ```
+3. Configure the driver:
+   Edit the `/etc/weewx/weewx.conf`, see [Configuration](#Configuration)
 
-===============================================================================
-Installation instructions:
+4. Restart WeeWX:
+    ```
+    sudo /etc/init.d/weewx restart
+    ```
 
-1) download the driver:
+## Configuration
+For communication with the netatmo servers, you will need three items:
+- `refresh_token`: Obtain this from your application page after creating a new token.
+- `client_id` and `client_secret`: These must be obtained via the dev.netatmo.com website.
 
-wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
+## License
+This driver is distributed under the GPLv3 license. See [LICENSE](LICENSE) for more information.
 
-wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
+## Support
+For questions, bug reports, or feature requests, please create an issue on the [GitHub repository](https://github.com/Buco7854/weewx-netatmo).
 
-2) install the driver:
-
-sudo wee_extension --install weewx-netatmo.zip
-
-3) select and configure the driver:
-
-sudo wee_config --reconfigure
-
-[bricebou]
-
-It seems that the configuration isn't written so you have to manually edit the `/etc/weewx/weewx.conf` file.
-
-[/bricebou]
-
-4) start weewx:
-
-sudo /etc/init.d/weewx start
+## Contributors
+- Matthew Wall (Original Author) - [Original Repository](https://github.com/Buco7854/weewx-netatmo)
+- bricebou (Contributor) - [Original Fork](https://github.com/bricebou/weewx-netatmo)
+- jkrasinger (Contributor) - [Current Fork](https://github.com/jkrasinger/weewx-netatmo)

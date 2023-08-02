@@ -45,6 +45,6 @@ This driver is distributed under the GPLv3 license. See [LICENSE](LICENSE) for m
 For questions, bug reports, or feature requests, please create an issue on the [GitHub repository](https://github.com/Buco7854/weewx-netatmo).
 
 ## Contributors
-- Matthew Wall (Original Author) - [Original Repository](https://github.com/Buco7854/weewx-netatmo)
+- Matthew Wall (Original Author) - [Original Repository](https://github.com/matthewwall/weewx-netatmo)
 - bricebou (Contributor) - [Original Fork](https://github.com/bricebou/weewx-netatmo)
 - jkrasinger (Contributor) - [Current Fork](https://github.com/jkrasinger/weewx-netatmo)

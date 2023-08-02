@@ -26,14 +26,28 @@ rain, and wind.
 """
 
 import queue
+import sys
+try:
+    import queue as Queue                                      # Python 3
+except:
+    import Queue                                        # Python 2
+
 import json
 import re
 import socket
 import syslog
 import threading
+# import datetime
 import time
-from urllib.parse import urlencode
-import urllib.request, urllib.error, urllib.parse
+try:
+    from urllib.parse import urlencode
+except:
+    from urllib import urlencode
+
+try:
+    import urllib.request, urllib.error, urllib.parse
+except:
+    import urllib2
 
 import weewx.drivers
 import weewx.engine
@@ -41,8 +55,10 @@ import weewx.units
 import weewx.wxformulas
 import weeutil.weeutil
 
+pvers = sys.version_info.major
+
 DRIVER_NAME = 'netatmo'
-DRIVER_VERSION = "0.14"
+DRIVER_VERSION = "0.17"
 
 INHG_PER_MBAR = 0.0295299830714
 MPH_TO_KPH = 1.60934
@@ -167,6 +183,8 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
             refresh_token = stn_dict['refresh_token']
             client_id = stn_dict['client_id']
             client_secret = stn_dict['client_secret']
+            gm_device_id = stn_dict.get('gm_device_id', None)
+            gm_node_id = stn_dict.get('gm_node_id', None)
             self.collector = CloudClient(
                 refresh_token, client_id, client_secret,
                 device_id=device_id, poll_interval=poll_interval,
@@ -191,7 +209,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
                 logdbg('packet: %s' % pkt)
                 if pkt:
                     yield pkt
-            except queue.Empty:
+            except Queue.Empty:
                 pass
 
     def data_to_packet(self, data):
@@ -230,7 +248,7 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
 
 
 class Collector(object):
-    queue = queue.Queue()
+    queue = Queue.Queue()
 
     def startup(self):
         pass
@@ -266,9 +284,10 @@ class CloudClient(Collector):
     """
 
     # endpoints for the cloud queries
-    NETATMO_URL = 'https://api.netatmo.net'
+    NETATMO_URL = 'https://api.netatmo.com'
     AUTH_URL = '/oauth2/token'
     DATA_URL = '/api/getstationsdata'
+    GETM_URL = '/api/getmeasure'
 
     # mapping between observation name and function used to convert it
     CONVERSIONS = {
@@ -277,10 +296,14 @@ class CloudClient(Collector):
         #        'Pressure': '_cvt_pressure',
         #        'WindStrength': '_cvt_speed',
         #        'GustStrength': '_cvt_speed',
+        #    'Temperature': '_cvt_temperature',
+        #    'AbsolutePressure': '_cvt_pressure',
+        #    'Pressure': '_cvt_pressure',
+        #    'WindStrength': '_cvt_speed',
+        #    'GustStrength': '_cvt_speed',
         'Rain': '_cvt_rain',
         'sum_rain_24': '_cvt_rain',
         'sum_rain_1': '_cvt_rain'}
-
     # list of source units we need to watch for
     UNITS = ['unit', 'windunit', 'pressureunit']
 
@@ -304,8 +327,10 @@ class CloudClient(Collector):
         self._auth = CloudClient.GrantTypeAuth(
             refresh_token, client_id, client_secret)
         self._sd = CloudClient.StationData(self._auth)
+        self._gm = CloudClient.StationMeasure(self._auth)
         self._thread = None
         self._collect_data = False
+        self._gm_info = {}
 
     def collect_data(self):
         """Loop forever, wake up periodically to see if it is time to quit."""
@@ -315,9 +340,11 @@ class CloudClient(Collector):
             if now - last_poll > self._poll_interval:
                 for tries in range(self._max_tries):
                     try:
-                        CloudClient.get_data(self._sd, self._device_id)
+                        CloudClient.get_data(self._sd, self._gm, self._device_id, self._gm_info)
                         break
-                    except (socket.error, socket.timeout, urllib.error.HTTPError, urllib.error.URLError) as e:
+                    except (socket.error, socket.timeout,
+                            urllib.error.HTTPError if pvers == 3 else urllib2.HTTPError,
+                            urllib.error.URLError if pvers == 3 else urllib2.URLError) as e:
                         logerr("failed attempt %s of %s to get data: %s" %
                                (tries + 1, self._max_tries, e))
                         logdbg("waiting %s seconds before retry" %
@@ -334,7 +361,7 @@ class CloudClient(Collector):
             time.sleep(1)
 
     @staticmethod
-    def get_data(sd, device_id):
+    def get_data(sd, gm, device_id, gm_info):
         """Query the server for each device and module, put data on queue"""
         raw_data = sd.get_data(device_id)
         units_dict = dict((x, raw_data['user']['administrative'][x])
@@ -351,10 +378,40 @@ class CloudClient(Collector):
             #            Collector.queue.put(data)
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
+                if m['type'] == 'NAModule3':                            # is it rain Module?
+                    curr_station = d['_id']
+                    if not curr_station in gm_info:
+                        gm_info[curr_station] = {'module': m['_id'], 'type': m['type'], 'lastp': 0, 'lasta': 0}
+                        print('Found Rain Module %s for correction' % gm_info[curr_station]['module'])
+                    actrain = data['time_utc']                          # actual time of measurement
+                    if gm_info[curr_station]['lastp'] == actrain:       # remove rain data if already posted
+                        data['Rain'] = 0.0                              # data already written, reset/set to zero
+                        logdbg('Duplicate detected. Modified rain to 0.0')
+                    gm_info[curr_station]['lastp'] = actrain            # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 alldata.update(data)
-        #                Collector.queue.put(data)
+        # Collector.queue.put(data)
         Collector.queue.put(alldata)
+
+        # Collector.queue.put(alldata)
+        """Query the server for rain data with getmeasurement."""
+        for station in gm_info:
+            rain_data = gm.get_data(station, gm_info[station]['module'])
+            logdbg('getmeasurement Resp: %s' % rain_data)
+            rain_data_times = [int(x) for x in rain_data.keys()]
+            rain_data_times.sort(reverse=True)
+            if rain_data_times[0] == gm_info[station]['lastp']:         # last measurement is the same time, OK
+                if rain_data_times[1] == gm_info[station]['lasta']:     # data already written?
+                    pass                                                # yes, do nothing
+                else:                                                   # no, prepare for adding rain amount
+                    # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
+                    # add the additional rain data to the entry "Rain" in collected data
+                    rainindex = gm_info[station]['module'] + "." + gm_info[station]['type'] + ".Rain"
+                    logdbg('Modified rain data for %s' % rainindex)
+                    alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
+                    gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
+        logdbg('Alldata: %s' % alldata)
+        Collector.queue.put(alldata)                            # now write the modified record
 
     @staticmethod
     def extract_data(x, units_dict):
@@ -485,13 +542,39 @@ class CloudClient(Collector):
             self._last_update = 0
             self._raw_data = dict()
 
-        def get_data(self, device_id=None, stale=300):
+        def get_data(self, device_id=None, stale=60):               # changed to 60 from 300 to avoid missing data
             if int(time.time()) - self._last_update > stale:
                 params = {}
                 headers = {"Authorization": "Bearer " + self._auth.access_token}
                 if device_id:
                     params['device_id'] = device_id
                 resp = CloudClient.post_request(CloudClient.DATA_URL, params, headers=headers)
+                self._raw_data = dict(resp['body'])
+                self._last_update = int(time.time())
+            return self._raw_data
+
+    class StationMeasure(object):
+        """ Get full rain data through a get measurement call."""
+        def __init__(self, auth):
+            self._auth = auth
+            self._last_update = 0
+            self._raw_data = dict()
+
+        def get_data(self, device_id, module_id, stale=60):         # changed to 60 from 300 to avoid missing data
+            if int(time.time()) - self._last_update > stale:
+                # date_begin = int(datetime.datetime.now().timestamp()) - 30 * 60
+                date_begin = int(time.time()) - 30 * 60
+                params = {'access_token': self._auth.access_token}
+                params['device_id'] = device_id
+                params['module_id'] = module_id
+                params['scale'] = 'max'
+                params['type'] = 'rain'
+                params['date_begin'] = date_begin
+                #  "&date_end=" + date_end +
+                #  "&limit=" + limit +
+                params['optimize'] = 'false'
+                params['real_time'] = 'true'
+                resp = CloudClient.post_request(CloudClient.GETM_URL, params)
                 self._raw_data = dict(resp['body'])
                 self._last_update = int(time.time())
             return self._raw_data
@@ -506,8 +589,10 @@ class CloudClient(Collector):
         headers.update({
             "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"})
         logdbg("url: %s data: %s hdr: %s" % (url, params, headers))
-        req = urllib.request.Request(url=url, data=params, headers=headers)
-        resp = urllib.request.urlopen(req).read(65535)
+        req = urllib.request.Request(url=url, data=params, headers=headers) if pvers == 3 else \
+            urllib2.Request(url=url, data=params, headers=headers)
+        resp = urllib.request.urlopen(req).read(65535) if pvers == 3 else \
+            urllib2.urlopen(req).read(65535)
         resp_obj = json.loads(resp)
         logdbg("resp_obj: %s" % resp_obj)
         return resp_obj
@@ -658,6 +743,4 @@ if __name__ == "__main__":
             print("%s]" % (indent * level))
         else:
             print("%s%s=%s" % (indent * level, label, x))
-
-
     main()

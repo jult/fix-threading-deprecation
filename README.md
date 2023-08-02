@@ -19,9 +19,9 @@ obtained via the dev.netatmo.com web site.  Using these 3 things, the driver
 automatically obtains and updates the tokens needed to get data from the
 server.
 
-<<<<<<< HEAD:readme
+[Buco7854]
 I basically changed some data sent and the way the token was sent, I tried to keep the same logic the code followed wich I must admit did not really like.
-=======
+
 [bricebou]
 This fork aims to be compatible with weewx 4.* and has been "rewritten" in Python 3 thanks to the `2to3` tool.
 [/bricebou]
@@ -50,20 +50,15 @@ Changes:
 
 [/jkrasinger]
 
-
-
->>>>>>> a6417c3083d71349bf9014a7e0753b11fe68a0f8:README.md
 ===============================================================================
 Installation instructions:
 
 1) download the driver:
 
-<<<<<<< HEAD:readme
 wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
-=======
-wget -O weewx-netatmo.zip https://github.com/smoldersj/weewx-netatmo/archive/master.zip
 
->>>>>>> a6417c3083d71349bf9014a7e0753b11fe68a0f8:README.md
+wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
+
 2) install the driver:
 
 sudo wee_extension --install weewx-netatmo.zip
@@ -73,7 +68,9 @@ sudo wee_extension --install weewx-netatmo.zip
 sudo wee_config --reconfigure
 
 [bricebou]
+
 It seems that the configuration isn't written so you have to manually edit the `/etc/weewx/weewx.conf` file.
+
 [/bricebou]
 
 4) start weewx:

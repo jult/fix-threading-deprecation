@@ -26,7 +26,7 @@ Firmware 102 introduced arbitrary encryption in response to a poorly chosen deci
     sudo wee_extension --install weewx-netatmo.zip
     ```
 3. Configure the driver:
-   Edit the `/etc/weewx/weewx.conf`, see [Configuration](#Configuration)
+   Edit the `/etc/weewx/weewx.conf`, see [Configuration](#configuration)
 
 4. Restart WeeWX:
     ```

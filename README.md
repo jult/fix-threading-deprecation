@@ -34,7 +34,7 @@ Firmware 102 introduced arbitrary encryption in response to a poorly chosen deci
     ```
 
 ## Configuration
-For communication with the netatmo servers, you will need to add these parameters to your weewx configuration :
+For communication with the netatmo servers, you will need to add these parameters to your WeeWX configuration :
 - `refresh_token`: Obtain this from your application page after creating a new token.
 - `client_id` and `client_secret`: These must be obtained via the dev.netatmo.com website.
 

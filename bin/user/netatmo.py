@@ -375,7 +375,7 @@ class CloudClient(Collector):
             data = CloudClient.extract_data(d, units_dict)
             data = CloudClient.apply_labels(data, d['_id'], d['type'])
             alldata.update(data)
-            #            Collector.queue.put(data)
+            # Collector.queue.put(data)
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
                 if m['type'] == 'NAModule3':                            # is it rain Module?
@@ -390,8 +390,6 @@ class CloudClient(Collector):
                     gm_info[curr_station]['lastp'] = actrain            # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 alldata.update(data)
-        # Collector.queue.put(data)
-        Collector.queue.put(alldata)
 
         # Collector.queue.put(alldata)
         """Query the server for rain data with getmeasurement."""

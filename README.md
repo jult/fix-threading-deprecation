@@ -19,7 +19,7 @@ Firmware 102 introduced arbitrary encryption in response to a poorly chosen deci
 
 1. Download the driver:
     ```
-    wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/master.zip
+    wget -O weewx-netatmo.zip https://github.com/Buco7854/weewx-netatmo/archive/rain_fix_test.zip
     ```
 2. Install the driver:
     ```

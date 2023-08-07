@@ -411,7 +411,7 @@ class CloudClient(Collector):
                         alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
                         gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
             else:
-                print("Lacking data for rain, skipping rain fix...")
+                print("Lacking data for rain fix. Skipping.")
         logdbg('Alldata: %s' % alldata)
         Collector.queue.put(alldata)                            # now write the modified record
 

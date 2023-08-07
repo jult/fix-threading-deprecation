@@ -398,16 +398,20 @@ class CloudClient(Collector):
             logdbg('getmeasurement Resp: %s' % rain_data)
             rain_data_times = [int(x) for x in rain_data.keys()]
             rain_data_times.sort(reverse=True)
-            if rain_data_times[0] == gm_info[station]['lastp']:         # last measurement is the same time, OK
-                if rain_data_times[1] == gm_info[station]['lasta']:     # data already written?
-                    pass                                                # yes, do nothing
-                else:                                                   # no, prepare for adding rain amount
-                    # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
-                    # add the additional rain data to the entry "Rain" in collected data
-                    rainindex = gm_info[station]['module'] + "." + gm_info[station]['type'] + ".Rain"
-                    logdbg('Modified rain data for %s' % rainindex)
-                    alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
-                    gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
+
+            if len(rain_data_times) > 1 and len(rain_data[str(rain_data_times[1])]) != 0:
+                if rain_data_times[0] == gm_info[station]['lastp']:         # last measurement is the same time, OK
+                    if rain_data_times[1] == gm_info[station]['lasta']:     # data already written?
+                        pass                                                # yes, do nothing
+                    else:                                                   # no, prepare for adding rain amount
+                        # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
+                        # add the additional rain data to the entry "Rain" in collected data
+                        rainindex = gm_info[station]['module'] + "." + gm_info[station]['type'] + ".Rain"
+                        logdbg('Modified rain data for %s' % rainindex)
+                        alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
+                        gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
+            else:
+                print("Lacking data for rain, skipping rain fix...")
         logdbg('Alldata: %s' % alldata)
         Collector.queue.put(alldata)                            # now write the modified record
 

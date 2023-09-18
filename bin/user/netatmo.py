@@ -27,10 +27,11 @@ rain, and wind.
 
 import queue
 import sys
+
 try:
-    import queue as Queue                                      # Python 3
+    import queue as Queue  # Python 3
 except:
-    import Queue                                        # Python 2
+    import Queue  # Python 2
 
 import json
 import re
@@ -39,6 +40,7 @@ import syslog
 import threading
 # import datetime
 import time
+
 try:
     from urllib.parse import urlencode
 except:
@@ -378,16 +380,17 @@ class CloudClient(Collector):
             # Collector.queue.put(data)
             for m in d['modules']:
                 data = CloudClient.extract_data(m, units_dict)
-                if m['type'] == 'NAModule3':                            # is it rain Module?
+                if m['type'] == 'NAModule3' and data.get('time_utc', None):
+                    # is it rain Module and was the time returned?
                     curr_station = d['_id']
                     if not curr_station in gm_info:
                         gm_info[curr_station] = {'module': m['_id'], 'type': m['type'], 'lastp': 0, 'lasta': 0}
                         print('Found Rain Module %s for correction' % gm_info[curr_station]['module'])
-                    actrain = data['time_utc']                          # actual time of measurement
-                    if gm_info[curr_station]['lastp'] == actrain:       # remove rain data if already posted
-                        data['Rain'] = 0.0                              # data already written, reset/set to zero
+                    actrain = data['time_utc']  # actual time of measurement
+                    if gm_info[curr_station]['lastp'] == actrain:  # remove rain data if already posted
+                        data['Rain'] = 0.0  # data already written, reset/set to zero
                         logdbg('Duplicate detected. Modified rain to 0.0')
-                    gm_info[curr_station]['lastp'] = actrain            # save last posted raindata time
+                    gm_info[curr_station]['lastp'] = actrain  # save last posted raindata time
                 data = CloudClient.apply_labels(data, m['_id'], m['type'])
                 alldata.update(data)
 
@@ -400,20 +403,20 @@ class CloudClient(Collector):
             rain_data_times.sort(reverse=True)
 
             if len(rain_data_times) > 1 and len(rain_data[str(rain_data_times[1])]) != 0:
-                if rain_data_times[0] == gm_info[station]['lastp']:         # last measurement is the same time, OK
-                    if rain_data_times[1] == gm_info[station]['lasta']:     # data already written?
-                        pass                                                # yes, do nothing
-                    else:                                                   # no, prepare for adding rain amount
+                if rain_data_times[0] == gm_info[station]['lastp']:  # last measurement is the same time, OK
+                    if rain_data_times[1] == gm_info[station]['lasta']:  # data already written?
+                        pass  # yes, do nothing
+                    else:  # no, prepare for adding rain amount
                         # Rain Data is statically converted from mm -> cm (as WEEWX needs it) by multiplying with 0.1
                         # add the additional rain data to the entry "Rain" in collected data
                         rainindex = gm_info[station]['module'] + "." + gm_info[station]['type'] + ".Rain"
                         logdbg('Modified rain data for %s' % rainindex)
                         alldata[rainindex] += (rain_data[str(rain_data_times[1])][0]) * 0.1
-                        gm_info[station]['lasta'] = rain_data_times[1]                # save last written date
+                        gm_info[station]['lasta'] = rain_data_times[1]  # save last written date
             else:
                 print("Lacking data for rain fix. Skipping.")
         logdbg('Alldata: %s' % alldata)
-        Collector.queue.put(alldata)                            # now write the modified record
+        Collector.queue.put(alldata)  # now write the modified record
 
     @staticmethod
     def extract_data(x, units_dict):
@@ -544,7 +547,7 @@ class CloudClient(Collector):
             self._last_update = 0
             self._raw_data = dict()
 
-        def get_data(self, device_id=None, stale=60):               # changed to 60 from 300 to avoid missing data
+        def get_data(self, device_id=None, stale=60):  # changed to 60 from 300 to avoid missing data
             if int(time.time()) - self._last_update > stale:
                 params = {}
                 headers = {"Authorization": "Bearer " + self._auth.access_token}
@@ -557,12 +560,13 @@ class CloudClient(Collector):
 
     class StationMeasure(object):
         """ Get full rain data through a get measurement call."""
+
         def __init__(self, auth):
             self._auth = auth
             self._last_update = 0
             self._raw_data = dict()
 
-        def get_data(self, device_id, module_id, stale=60):         # changed to 60 from 300 to avoid missing data
+        def get_data(self, device_id, module_id, stale=60):  # changed to 60 from 300 to avoid missing data
             if int(time.time()) - self._last_update > stale:
                 # date_begin = int(datetime.datetime.now().timestamp()) - 30 * 60
                 date_begin = int(time.time()) - 30 * 60
@@ -745,4 +749,6 @@ if __name__ == "__main__":
             print("%s]" % (indent * level))
         else:
             print("%s%s=%s" % (indent * level, label, x))
+
+
     main()

@@ -24,7 +24,6 @@ This driver supports multiple devices, and all known modules on each device.
 As of april 2016 that means the base station, 'outside' T/H, additional T/H,
 rain, and wind.
 """
-
 import queue
 import sys
 
@@ -121,12 +120,12 @@ class NetatmoConfEditor(weewx.drivers.AbstractConfEditor):
         print("Specify the mode for obtaining data, either 'cloud' or 'sniff'")
         settings['mode'] = self._prompt('mode', 'cloud', ['cloud', 'sniff'])
         if settings['mode'] == 'cloud':
-            print("Specify the refresh token for netatmo.com")
-            self._prompt('refresh_token')
             print("Specify the client id for netatmo.com")
             self._prompt('client_id')
             print("Specify the client secret for netatmo.com")
             self._prompt('client_secret')
+            print("Specify the tokens persistence file")
+            self._prompt('tokens_persistence_file')
         return settings
 
 
@@ -182,13 +181,13 @@ class NetatmoDriver(weewx.drivers.AbstractDevice):
             max_tries = int(stn_dict.get('max_tries', 5))
             retry_wait = int(stn_dict.get('retry_wait', 10))  # seconds
             poll_interval = int(stn_dict.get('poll_interval', 300))  # seconds
-            refresh_token = stn_dict['refresh_token']
+            tokens_persistence_file = stn_dict['tokens_persistence_file']
             client_id = stn_dict['client_id']
             client_secret = stn_dict['client_secret']
             gm_device_id = stn_dict.get('gm_device_id', None)
             gm_node_id = stn_dict.get('gm_node_id', None)
             self.collector = CloudClient(
-                refresh_token, client_id, client_secret,
+                tokens_persistence_file, client_id, client_secret,
                 device_id=device_id, poll_interval=poll_interval,
                 max_tries=max_tries, retry_wait=retry_wait)
         else:
@@ -320,14 +319,14 @@ class CloudClient(Collector):
         'battery_percent',
         'firmware', 'last_setup', 'last_upgrade', 'date_setup']
 
-    def __init__(self, refresh_token, client_id, client_secret,
+    def __init__(self, tokens_persistence_file, client_id, client_secret,
                  device_id=None, poll_interval=300, max_tries=3, retry_wait=30):
         self._poll_interval = poll_interval
         self._max_tries = max_tries
         self._retry_wait = retry_wait
         self._device_id = device_id
         self._auth = CloudClient.GrantTypeAuth(
-            refresh_token, client_id, client_secret)
+            tokens_persistence_file, client_id, client_secret)
         self._sd = CloudClient.StationData(self._auth)
         self._gm = CloudClient.StationMeasure(self._auth)
         self._thread = None
@@ -518,8 +517,8 @@ class CloudClient(Collector):
 
         It will re-query the netatmo server whenever the tokens have expired"""
 
-        def __init__(self, refresh_token, client_id, client_secret):
-            self._refresh_token = refresh_token
+        def __init__(self, tokens_persistence_file, client_id, client_secret):
+            self._tokens_persistence_file = tokens_persistence_file
             self._client_id = client_id
             self._client_secret = client_secret
 
@@ -528,16 +527,42 @@ class CloudClient(Collector):
             self._expiration = None
 
         @property
+        def refresh_token(self):
+            data = {}
+            with open(self._tokens_persistence_file, 'r') as f:
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Could not decode {self._tokens_persistence_file} content into a json format, "
+                                    f"you should also provide a refresh_token key: {e}")
+            refresh_token = data.get("refresh_token", None)
+            if not refresh_token:
+                raise ValueError("Missing refresh_token in file {}".format(self._tokens_persistence_file))
+            return refresh_token
+
+        @refresh_token.setter
+        def refresh_token(self, value):
+            data = {}
+            with open(self._tokens_persistence_file, 'r') as f:
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError:
+                    data = {}
+            data["refresh_token"] = value
+            with open(self._tokens_persistence_file, 'w') as f:
+                json.dump(data, f)
+
+        @property
         def access_token(self):
             if self._expiration is None or self._expiration < time.time():
                 params = {
                     'grant_type': 'refresh_token',
-                    'refresh_token': self._refresh_token,
+                    'refresh_token': self.refresh_token,
                     'client_id': self._client_id,
                     'client_secret': self._client_secret}
                 resp = CloudClient.post_request(CloudClient.AUTH_URL, params)
                 self._access_token = resp['access_token']
-                self._refresh_token = resp['refresh_token']
+                self.refresh_token = resp['refresh_token']
                 self._expiration = int(resp['expire_in'] + time.time())
             return self._access_token
 
@@ -666,8 +691,8 @@ if __name__ == "__main__":
                           help='run the driver in cloud client mode')
         parser.add_option('--test-parse', dest='tp', metavar='FILENAME',
                           help='test the tcp packet parser')
-        parser.add_option('--refresh-token', dest='refresh_token', metavar='REFRESH_TOKEN',
-                          help='refresh token for cloud mode')
+        parser.add_option('--tokens_persistence_file', dest='tokens_persistence_file', metavar='TOKENS_PERSISTENCE_FILE',
+                          help='tokens persistence file for cloud mode')
         parser.add_option('--client-id', dest='ci', metavar='CLIENT_ID',
                           help='client_id for cloud mode')
         parser.add_option('--client-secret', dest='cs', metavar='CLIENT_SECRET',
@@ -684,13 +709,13 @@ if __name__ == "__main__":
         if opts.ts:
             run_packet_driver()
         if opts.tc:
-            run_cloud_driver(opts.refresh_token, opts.ci, opts.cs)
+            run_cloud_driver(opts.tokens_persistence_file, opts.ci, opts.cs)
         if opts.tp:
             test_parse(options.tp)
         if opts.sdata:
-            get_station_data(opts.refresh_token, opts.ci, opts.cs)
+            get_station_data(opts.tokens_persistence_file, opts.ci, opts.cs)
         if opts.jdata:
-            get_json_data(opts.refresh_token, opts.ci, opts.cs)
+            get_json_data(opts.tokens_persistence_file, opts.ci, opts.cs)
 
 
     def run_sniff_driver():
@@ -700,12 +725,12 @@ if __name__ == "__main__":
             print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
 
 
-    def run_cloud_driver(refresh_token, c_id, c_secret):
+    def run_cloud_driver(tokens_persistence_file, c_id, c_secret):
         import weeutil.weeutil
         driver = None
         try:
             driver = NetatmoDriver(mode='cloud',
-                                   refresh_token=refresh_token,
+                                   tokens_persistence_file=tokens_persistence_file,
                                    client_id=c_id, client_secret=c_secret)
             for pkt in driver.genLoopPackets():
                 print(weeutil.weeutil.timestamp_to_string(pkt['dateTime']), pkt)
@@ -713,14 +738,14 @@ if __name__ == "__main__":
             driver.closePort()
 
 
-    def get_station_data(refresh_token, c_id, c_secret):
-        auth = CloudClient.GrantTypeAuth(refresh_token, c_id, c_secret)
+    def get_station_data(tokens_persistence_file, c_id, c_secret):
+        auth = CloudClient.GrantTypeAuth(tokens_persistence_file, c_id, c_secret)
         sd = CloudClient.StationData(auth)
         ppv('station data', sd.get_data())
 
 
-    def get_json_data(refresh_token, c_id, c_secret):
-        auth = CloudClient.GrantTypeAuth(refresh_token, c_id, c_secret)
+    def get_json_data(tokens_persistence_file, c_id, c_secret):
+        auth = CloudClient.GrantTypeAuth(tokens_persistence_file, c_id, c_secret)
         params = {'app_type': 'app_station'}
         headers = {"Authorization": "Bearer " + auth.access_token}
         reply = CloudClient.post_request(CloudClient.DATA_URL, params, headers=headers)

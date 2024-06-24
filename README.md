@@ -25,6 +25,10 @@ Firmware 102 introduced arbitrary encryption in response to a poorly chosen deci
     ```
     sudo wee_extension --install weewx-netatmo.zip
     ```
+   or for WeeWX 5.0
+   ```
+   weectl extension install weewx-netatmo.zip
+   ```
 3. Configure the driver:
    Edit the `/etc/weewx/weewx.conf`, see [Configuration](#configuration).
 
@@ -32,10 +36,23 @@ Firmware 102 introduced arbitrary encryption in response to a poorly chosen deci
     ```
     sudo /etc/init.d/weewx restart
     ```
+   or
+   ```
+   sudo systemctl restart weewx.service
+   ```
+   
 
 ## Configuration
 For communication with the netatmo servers, you will need to add these parameters to your WeeWX configuration :
-- `refresh_token`: Obtain this from your application page after creating a new token.
+- `tokens_persistence_file`: The path to a json file that requires a `refresh_token` key. Obtain this from your application page after creating a new token. You must **NEVER** delete the file since it will contain a temporary token that will be reused between restart. 
+
+   For example your `tokens_persistence_file` will be `/etc/weewx/tokens_persistence_file.json` and will look as followed:
+   ```json
+  {"refresh_token": "YOUR_TOKEN"}
+   ```
+  ⚠️ Make sure weewx user can read and write in this file.
+
+
 - `client_id` and `client_secret`: These must be obtained via the dev.netatmo.com website.
 
 ## License

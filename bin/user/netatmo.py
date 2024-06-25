@@ -24,7 +24,6 @@ This driver supports multiple devices, and all known modules on each device.
 As of april 2016 that means the base station, 'outside' T/H, additional T/H,
 rain, and wind.
 """
-import queue
 import sys
 
 try:

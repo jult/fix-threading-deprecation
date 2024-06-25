@@ -48,7 +48,7 @@ For communication with the netatmo servers, you will need to add these parameter
 
    For example your `tokens_persistence_file` will be `/etc/weewx/tokens_persistence_file.json` and will look as followed:
    ```json
-  {"refresh_token": "YOUR_TOKEN"}
+  {"refresh_token":"YOUR_TOKEN"}
    ```
   ⚠️ Make sure weewx user can read and write in this file.
 

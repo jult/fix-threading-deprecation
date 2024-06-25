@@ -533,8 +533,11 @@ class CloudClient(Collector):
                 try:
                     data = json.load(f)
                 except json.JSONDecodeError as e:
-                    raise Exception(f"Could not decode {self._tokens_persistence_file} content into a json format, "
-                                    f"you should also provide a refresh_token key: {e}")
+                    raise Exception(
+                        "Could not decode {} content into a JSON format, "
+                        "you should also provide a refresh_token key: {}".format(self._tokens_persistence_file, e)
+                    )
+
             refresh_token = data.get("refresh_token", None)
             if not refresh_token:
                 raise ValueError("Missing refresh_token in file {}".format(self._tokens_persistence_file))
@@ -691,7 +694,8 @@ if __name__ == "__main__":
                           help='run the driver in cloud client mode')
         parser.add_option('--test-parse', dest='tp', metavar='FILENAME',
                           help='test the tcp packet parser')
-        parser.add_option('--tokens_persistence_file', dest='tokens_persistence_file', metavar='TOKENS_PERSISTENCE_FILE',
+        parser.add_option('--tokens_persistence_file', dest='tokens_persistence_file',
+                          metavar='TOKENS_PERSISTENCE_FILE',
                           help='tokens persistence file for cloud mode')
         parser.add_option('--client-id', dest='ci', metavar='CLIENT_ID',
                           help='client_id for cloud mode')

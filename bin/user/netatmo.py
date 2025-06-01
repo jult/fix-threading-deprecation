@@ -59,6 +59,7 @@ pvers = sys.version_info.major
 
 DRIVER_NAME = 'netatmo'
 DRIVER_VERSION = "0.17"
+DEBUG = False
 
 INHG_PER_MBAR = 0.0295299830714
 MPH_TO_KPH = 1.60934
@@ -70,8 +71,7 @@ KNOT_TO_KPH = 1.852
 
 def logmsg(level, msg):
     syslog.syslog(level, 'netatmo: %s: %s' %
-                  (threading.currentThread().getName(), msg))
-
+                  (threading.current_thread().name, msg))
 
 def logdbg(msg):
     logmsg(syslog.LOG_DEBUG, msg)

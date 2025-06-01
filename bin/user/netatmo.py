@@ -58,7 +58,7 @@ import weeutil.weeutil
 pvers = sys.version_info.major
 
 DRIVER_NAME = 'netatmo'
-DRIVER_VERSION = "0.17"
+DRIVER_VERSION = "0.18"
 DEBUG = False
 
 INHG_PER_MBAR = 0.0295299830714
